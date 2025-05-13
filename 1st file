@@ -1,0 +1,54 @@
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require('cors');
+
+const app = express();
+app.use(cors());
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*'
+  }
+});
+
+let waitingUser = null;
+
+io.on('connection', (socket) => {
+  console.log('A user connected:', socket.id);
+
+  if (waitingUser) {
+    socket.partner = waitingUser;
+    waitingUser.partner = socket;
+
+    socket.emit('match', { message: 'Partner found!' });
+    waitingUser.emit('match', { message: 'Partner found!' });
+
+    waitingUser = null;
+  } else {
+    waitingUser = socket;
+    socket.emit('waiting', { message: 'Waiting for a partner...' });
+  }
+
+  socket.on('message', (data) => {
+    if (socket.partner) {
+      socket.partner.emit('message', data);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log('A user disconnected:', socket.id);
+    if (socket.partner) {
+      socket.partner.emit('partner-disconnected');
+      socket.partner.partner = null;
+    }
+    if (waitingUser === socket) {
+      waitingUser = null;
+    }
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
