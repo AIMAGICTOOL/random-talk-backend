@@ -1,8 +1,8 @@
 {
   "name": "random-talk-backend",
   "version": "1.0.0",
+  "description": "Backend for Random Talk App",
   "main": "index.js",
-  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
