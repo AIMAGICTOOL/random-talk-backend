@@ -1,36 +1,55 @@
-import express from "express";
-import http from "http";
-import { Server } from "socket.io";
-import cors from "cors";
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const cors = require("cors");
 
 const app = express();
+app.use(cors());
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: "*"
   }
 });
 
-app.use(cors());
-
-app.get("/", (req, res) => {
-  res.send("Random Talk backend is live!");
-});
+let waitingUser = null;
 
 io.on("connection", (socket) => {
-  console.log("A user connected: " + socket.id);
+  console.log("User connected:", socket.id);
 
-  socket.on("send_message", (data) => {
-    socket.broadcast.emit("receive_message", data);
+  if (waitingUser) {
+    // Pair them
+    socket.partner = waitingUser;
+    waitingUser.partner = socket;
+
+    waitingUser.emit("match_found");
+    socket.emit("match_found");
+
+    waitingUser = null;
+  } else {
+    waitingUser = socket;
+    socket.emit("waiting");
+  }
+
+  socket.on("send_message", (msg) => {
+    if (socket.partner) {
+      socket.partner.emit("receive_message", msg);
+    }
   });
 
   socket.on("disconnect", () => {
-    console.log("User disconnected: " + socket.id);
+    console.log("User disconnected:", socket.id);
+    if (waitingUser === socket) {
+      waitingUser = null;
+    }
+    if (socket.partner) {
+      socket.partner.emit("partner_disconnected");
+      socket.partner.partner = null;
+    }
   });
 });
 
-const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+server.listen(3000, () => {
+  console.log("Server running on port 3000");
 });
