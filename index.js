@@ -1,16 +1,17 @@
 const express = require("express");
 const http = require("http");
-const { Server } = require("socket.io");
+const socketIo = require("socket.io");
 const cors = require("cors");
 
 const app = express();
 app.use(cors());
 
 const server = http.createServer(app);
-const io = new Server(server, {
+const io = socketIo(server, {
   cors: {
-    origin: "*"
-  }
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
 });
 
 let waitingUser = null;
@@ -19,37 +20,38 @@ io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
   if (waitingUser) {
-    // Pair them
-    socket.partner = waitingUser;
-    waitingUser.partner = socket;
-
-    waitingUser.emit("match_found");
-    socket.emit("match_found");
-
+    // Pair the current socket with the waiting one
+    const partner = waitingUser;
     waitingUser = null;
+
+    socket.partner = partner;
+    partner.partner = socket;
+
+    socket.emit("message", "🟢 Connected to a stranger!");
+    partner.emit("message", "🟢 Connected to a stranger!");
   } else {
+    // No one is waiting, add to queue
     waitingUser = socket;
-    socket.emit("waiting");
+    socket.emit("message", "⏳ Waiting for a stranger to join...");
   }
 
-  socket.on("send_message", (msg) => {
+  socket.on("send_message", (message) => {
     if (socket.partner) {
-      socket.partner.emit("receive_message", msg);
+      socket.partner.emit("receive_message", message);
     }
   });
 
   socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-    if (waitingUser === socket) {
+    if (socket.partner) {
+      socket.partner.emit("message", "❌ Stranger disconnected.");
+      socket.partner.partner = null;
+    } else if (waitingUser === socket) {
       waitingUser = null;
     }
-    if (socket.partner) {
-      socket.partner.emit("partner_disconnected");
-      socket.partner.partner = null;
-    }
+    console.log("User disconnected:", socket.id);
   });
 });
 
 server.listen(3000, () => {
-  console.log("Server running on port 3000");
+  console.log("Server running on http://localhost:3000");
 });
